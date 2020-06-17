@@ -1,0 +1,12 @@
+name: AWS_RI_Exchanger
+title: AWS_RI_Exchanger
+username:
+account: nephele
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2466793
+bundleId: 3281641
+url: https://nephele.shinyapps.io/AWS_RI_Exchanger/
+when: 1592390471.7109
+asMultiple: FALSE
+asStatic: FALSE
