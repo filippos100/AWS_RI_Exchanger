@@ -3,24 +3,17 @@ library(shinyWidgets)
 library(tidyverse)
 library(shiny)
 library(DT)
+library(rdrop2)
 
-Price_1year <- read.csv('Prices1yearsnoupfront.csv') %>%
-  mutate(Term = "1year") %>%
-  rename(OS = System,Convertible = Price, On_Demand = On.demand,Offering_Class = Offering.class)
-
-Price_3year <- read.csv('Prices3yearsnoupfront.csv') %>%
-  mutate(Term = "3years") %>%
-  rename(OS = System,Convertible = Price, On_Demand = On.demand,Offering_Class = Offering.class)
-
-Price <- merge(Price_1year,Price_3year,by=c("Region","OS","Type","Convertible","On_Demand","Offering_Class","Term"),all = TRUE)
-
+source("etl.R")
 
 ui <- dashboardPage(
   dashboardHeader(title = "Nephele",
                   dropdownMenuOutput("message")),
   dashboardSidebar(
     sidebarMenu(
-      menuItem("RI Calculator Form",tabName = "calculatornew",icon = icon("calculator"))
+      menuItem("RI Calculator Form",tabName = "calculatornew",icon = icon("calculator")),
+      menuItem("Search",tabName = "search")
     )
   ),
   dashboardBody(
@@ -31,6 +24,7 @@ ui <- dashboardPage(
                 tags$br(),
                 dropdown(
                   textInput("ri","Enter the RI number"),
+                  textInput("account","Enter the account"),
                   selectInput("Region","Select The Region",
                               choices = unique(Price$Region),
                               selected = "us-west-2"),
@@ -39,6 +33,8 @@ ui <- dashboardPage(
                               selected = "c5.large"),
                   selectInput("Oldos","Select The Original OS",
                               choices = unique(Price$OS)),
+                  selectInput("term","Select The Term",
+                              choices = unique(Price$Term)),
                   numericInput("number","Enter Number of Instances",1,min = 1,max = 10000),
                   selectInput("Newec2","Select the Candidate",
                               choices = unique(Price$Type),
@@ -64,20 +60,26 @@ ui <- dashboardPage(
                 tags$hr(),
                 downloadButton("downloadData", "Download"),
                 actionButton("deleteRow", "Delete Row"),
+                actionButton("save","Save"),
                 tags$hr(),
                 column(width = 12, DT::dataTableOutput("responses", width = '100%')))
-      )
+      ),
+      tabItem(tabName = "search",
+              fluidPage(DT::dataTableOutput("searchtable")))
     )))
 
 ######################################################
 ####################Server############################
 ######################################################
-server <- function(input,output){
-  ###################### Exchanger form############################# 
-  df <- data.frame(Reservation_ID = character(0),
+server <- function(input,output,session){
+  ###################### Exchange form############################# 
+  df <- data.frame(Date = character(0),
+                   Reservation_ID = character(0),
+                   Account = character(0),
                    Region = character(0),
                    Oldec2 = character(0),
                    Oldos = character(0),
+                   Term = character(0),
                    number = character(0),
                    Newec2 = character(0),
                    Newos = character(0),
@@ -87,22 +89,25 @@ server <- function(input,output){
   
   
   observeEvent(input$submit,{
-    data = data.frame(Reservation_ID = input$ri,
+    data = data.frame(Date = Sys.Date(),
+                      Reservation_ID = input$ri,
+                      Account = input$account,
                       Region = input$Region,
                       Oldec2 = input$Oldec2,
                       Oldos = input$Oldos,
+                      Term = input$term,
                       number = input$number,
                       Newec2 = input$Newec2,
                       Newos = input$Newos,
-                      Amount = (Price %>% filter(Type == input$Oldec2 & Region == input$Region & 
-                                                    OS == input$Oldos) %>% select(Convertible) %>%
+                      Amount = ceiling((Price %>% filter(Type == input$Oldec2 & Region == input$Region & 
+                                                    OS == input$Oldos & Term == input$term) %>% select(Convertible) %>%
                                   slice(1) %>% pull()*input$number)/
                         (Price %>% filter(Type == input$Newec2 &Region == input$Region & 
-                                             OS == input$Newos) %>%
+                                             OS == input$Newos & Term == input$term) %>%
                            select(Convertible) %>%
-                           slice(1) %>% pull()),
+                           slice(1) %>% pull())),
                       Savings = input$number*(Price %>% filter(Type == input$Oldec2 & Region == input$Region & 
-                                                                  OS == input$Oldos) %>% select(Convertible) %>%
+                                                                  OS == input$Oldos & Term == input$term) %>% select(Convertible) %>%
                                                 slice(1) %>% pull()*730))
     
     df <<-  rbind(df,data)
@@ -120,8 +125,9 @@ server <- function(input,output){
     
     datatable(df)
     #return(df)
-  }) 
+  })
   
+
   observe({
     input$submit
     input$deleteRow
